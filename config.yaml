@@ -1,0 +1,74 @@
+# ====== Configuración de Mike ======
+# Todo lo que empieza con "TU_" lo llenas tú. Mike arranca igual sin ellos (con respaldos gratis).
+
+nombre: Mike
+idioma: es
+
+cerebro:
+  proveedor: ollama          # ollama (gratis, local) | anthropic (tu cuenta Claude, de pago)
+  ollama_url: http://localhost:11434
+  ollama_modelo: hermes3:8b              # cerebro principal — `ollama pull hermes3:8b`
+  ollama_ctx: 4096                        # tamaño de contexto (KV cache). Súbelo si te sobra VRAM; bájalo si da OOM
+  anthropic_api_key: TU_ANTHROPIC_KEY   # solo si algún día usas proveedor: anthropic
+  anthropic_modelo: sonnet   # opus | sonnet | haiku  (o id completo)
+  eficiencia: equilibrado    # rapido | equilibrado | profundo (solo aplica a anthropic)
+  doble_verificacion: true   # el Crítico revisa cada plan antes de ejecutar
+  # Consejo de IAs: varias hacen una "junta", se revisan y corrigen entre sí antes de responderte.
+  # Cada corrección se guarda como lección en el vault, así todas mejoran en los próximos turnos.
+  # Corre con Ollama (gratis). Cada miembro es un modelo distinto: instálalos con `ollama pull <modelo>`.
+  consejo:
+    activo: false            # actívalo cuando Hermes solo ya funcione bien
+    rondas: 2                # cuántas veces debaten antes de dar la respuesta final
+    solo_preguntas: true     # true = la junta solo se usa en preguntas (no en charla trivial)
+    miembros:                # hermes(8B ~5GB) + qwen(3B ~2GB): caben juntos en tus 8GB de VRAM
+      - {proveedor: ollama, modelo: hermes3:8b}
+      - {proveedor: ollama, modelo: qwen2.5:3b}
+
+  # Colmena: muchos agentes especializados (abejas) que se comunican por el Panal (vault de
+  # Obsidian: Panal.md) como una mente de colmena. Se usa en PREGUNTAS y para revisar ÓRDENES.
+  # Cada abeja corre en un modelo del pool de 'consejo.miembros' (rota) → multi-rol y multi-modelo.
+  # OJO: cada abeja es una llamada al modelo. Con 5 abejas y 1 ronda son ~6 llamadas por turno;
+  # en CPU sin GPU se siente lento. Baja 'rondas' o quita abejas si molesta.
+  colmena:
+    activo: false            # el enjambre de 5 es pesado para 8GB; déjalo apagado por ahora
+    rondas: 1                # cuántas vueltas dan las abejas hablando por el Panal antes de la Reina
+    agentes:                 # quita/agrega las que quieras; el rol guía qué aporta cada una
+      - {rol: Investigador,     mision: "aporta los datos y el contexto que hagan falta"}
+      - {rol: Verificador,      mision: "comprueba los hechos y marca lo falso o dudoso"}
+      - {rol: Seguridad,        mision: "detecta riesgos, daños o acciones irreversibles"}
+      - {rol: Estratega,        mision: "propone la forma más simple y correcta de resolverlo"}
+      - {rol: AbogadoDelDiablo, mision: "busca el fallo que a todas las demás se les escapó"}
+
+voz:
+  proveedor: elevenlabs      # elevenlabs (free tier ~10k chars/mes) | edge (gratis, ilimitado)
+  elevenlabs_api_key: TU_ELEVENLABS_KEY
+  elevenlabs_voice_id: TU_VOICE_ID     # en elevenlabs.io > Voices > copia el ID
+  edge_voz: es-MX-JorgeNeural          # respaldo gratis si ElevenLabs se agota
+
+oidos:
+  stt_modelo: base           # tiny | base | small | medium (en CPU, base/tiny van más rápido)
+  stt_dispositivo: cpu       # cpu (no necesita CUDA) | cuda (requiere cublas+cudnn instalados)
+  palabra_clave: mike
+  aplauso: true              # aplauso o chasquido activa/oculta la UI
+  aplauso_umbral: 0.35       # 0..1 — baja si no detecta, sube si se activa solo
+  microfono: null            # null = por defecto; o el índice de `python -m sounddevice`
+
+gestos:
+  activo: false              # mediapipe no soporta Python 3.13; ponlo en true si usas Python 3.11/3.12
+  camara: 0
+
+manos:
+  openrgb_host: 127.0.0.1    # OpenRGB con "Start SDK Server" activado
+  openrgb_puerto: 6742
+  apps:                      # alias -> ejecutable/ruta
+    obsidian: obsidian
+    navegador: start chrome
+    vscode: code
+    spotify: start spotify
+
+memoria:
+  vault: ./vault             # carpeta de Obsidian (ábrela como vault)
+
+ui:
+  puerto: 8765               # WebSocket entre núcleo y la UI
+  esquina: abajo-izquierda

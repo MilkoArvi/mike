@@ -1,0 +1,37 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Env
+.env
+.env.local
+*.log
+
+# Vault (contenido potencialmente sensible)
+vault/*.secret
+
+# node_modules (ui subdir)
+node_modules/
+**/node_modules/
+
+# Claude local settings (per-user)
+.claude/settings.local.json

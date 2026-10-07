@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Mike</title>
+<style>
+  :root{
+    --horizonte:#000;
+    --disco:#ff2bd6;      /* idle: magenta neón (synthwave 80s) */
+    --disco-2:#00e5ff;    /* cian neón */
+    --texto:#f3efe6;
+    --panel:rgba(6,6,10,.78);
+  }
+  html,body{margin:0;height:100%;background:transparent;overflow:hidden;
+    font:15px/1.45 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;color:var(--texto);
+    -webkit-app-region:no-drag;user-select:none}
+  #cv{position:fixed;inset:0;display:block}
+  /* Panel de texto / imagen. Chico: pegado al orbe. Expandido: a la derecha del orbe, grande. */
+  #panel{position:fixed;left:16px;bottom:16px;max-width:calc(100vw - 32px);
+    background:var(--panel);backdrop-filter:blur(10px);border-radius:14px;padding:10px 14px;
+    opacity:0;transform:translateY(6px);transition:opacity .25s,transform .25s;pointer-events:none;
+    white-space:pre-wrap;word-break:break-word}
+  #panel.visible{opacity:1;transform:none}
+  body.expandido #panel{left:38vw;top:8vh;bottom:8vh;right:4vw;max-width:none;font-size:20px;
+    overflow:auto;pointer-events:auto;padding:28px 32px;line-height:1.55}
+  #panel img{max-width:100%;max-height:70vh;display:block;border-radius:10px;margin-top:12px}
+  #panel code,#panel pre{font-family:Cascadia Code,Consolas,monospace;font-size:.92em}
+  #entrada{position:fixed;left:16px;bottom:14px;width:228px;padding:8px 12px;border-radius:999px;
+    border:1px solid rgba(255,255,255,.15);background:var(--panel);color:var(--texto);outline:none;
+    display:none;font:inherit}
+  #entrada:focus{border-color:var(--disco)}
+  #estado{position:fixed;left:22px;top:12px;font-size:12px;opacity:.55;letter-spacing:.02em}
+  /* Anclado (dormido en la esquina): orbe tenue y sin panel ni campo de texto */
+  #cv{transition:opacity .5s}
+  body.anclado #cv{opacity:.5}
+  body.anclado #estado,body.anclado #panel,body.anclado #entrada{display:none!important}
+  @media (prefers-reduced-motion:reduce){ #cv{filter:none} }
+</style>
+</head>
+<body class="anclado">
+<canvas id="cv"></canvas>
+<div id="estado"></div>
+<div id="panel"></div>
+<input id="entrada" placeholder="Escríbele a Mike…" autocomplete="off">
+
+<script>
+const { ipcRenderer } = require('electron');
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+const panel = document.getElementById('panel'), entrada = document.getElementById('entrada'),
+      estadoEl = document.getElementById('estado');
+
+// ---------- estado ----------
+let estado = 'idle';           // idle | escuchando | pensando | hablando
+let expandido = false;
+let inclinacion = 0.35;        // rad, inclinación del disco (la cambia el giro con la mano o el mouse)
+let giroObjetivo = null;       // grados 0-360 pedidos por gesto
+let velocidad = 0.004;
+let amplitud = 0;              // "voz" del orbe cuando habla
+
+// Paleta synthwave 80s: dos neones por estado (interior, exterior del disco)
+const COLORES = {
+  idle:       ['#ff2bd6', '#00e5ff'],   // magenta + cian
+  escuchando: ['#00e5ff', '#2b6bff'],   // cian + azul
+  pensando:   ['#b14bff', '#ff2bd6'],   // violeta + magenta
+  hablando:   ['#ffe14b', '#ff2bd6'],   // amarillo caliente + magenta
+};
+
+function redim(){ cv.width = innerWidth; cv.height = innerHeight; }
+addEventListener('resize', redim); redim();
+
+// #rrggbb + alfa(0..1) -> rgba()
+function hex(c, a){
+  if (c === 'transparent') return c;
+  const n = parseInt(c.replace('#',''), 16);
+  return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;
+}
+
+// ---------- dibujo: agujero negro vectorial estilo 80s ----------
+// Un anillo elíptico "vectorial" con brillo doppler que rota (un lado más brillante).
+function discoAnillo(cx, cy, rx, ry, col, alfa, fase){
+  const paso = 0.16;
+  for (let a = 0; a < Math.PI * 2; a += paso){
+    const br = 0.28 + 0.72 * (Math.cos(a - fase) + 1) / 2;   // lado que "gira hacia ti" brilla más
+    ctx.strokeStyle = hex(col, Math.min(1, alfa * br));
+    ctx.lineWidth = 1.0 + br * 1.9;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, Math.max(1, rx), Math.max(1, ry), 0, a, a + paso);
+    ctx.stroke();
+  }
+}
+
+function dibujar(){
+  const W = cv.width, H = cv.height;
+  ctx.clearRect(0, 0, W, H);
+  const R = expandido ? Math.min(W, H) * 0.16 : Math.min(W, H) * 0.19;
+  const cx = expandido ? W * 0.20 : W / 2, cy = expandido ? H * 0.5 : H / 2;
+  const [c1, c2] = COLORES[estado];
+  const t = performance.now() / 1000;
+
+  if (giroObjetivo !== null) inclinacion += ((giroObjetivo * Math.PI / 180) - inclinacion) * 0.08;
+  // inclinación del disco -> qué tan aplastadas se ven las elipses (perspectiva 2D)
+  const squash = 0.30 + Math.abs(Math.sin(inclinacion)) * 0.14;
+
+  // 1) Resplandor neón de fondo
+  const glow = ctx.createRadialGradient(cx, cy, R * 0.4, cx, cy, R * 3.4);
+  glow.addColorStop(0, hex(c1, 0.18)); glow.addColorStop(0.5, hex(c2, 0.07)); glow.addColorStop(1, 'transparent');
+  ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+
+  // 2) Disco de acreción = elipses neón concéntricas (look vectorial 80s), con brillo que rota
+  ctx.globalCompositeOperation = 'lighter';
+  const anillos = 7;
+  for (let i = 0; i < anillos; i++){
+    const f = i / (anillos - 1);                 // 0 interno -> 1 externo
+    const rx = R * (1.12 + f * 1.45);
+    const ry = rx * squash;
+    const fase = t * (1.4 - f * 0.7) * (1 + velocidad * 22);
+    const col = i % 2 ? c1 : c2;
+    const alfa = (0.55 - f * 0.34) * (0.7 + amplitud * 0.6);
+    discoAnillo(cx, cy, rx, ry, col, alfa, fase);
+  }
+  ctx.globalCompositeOperation = 'source-over';
+
+  // 3) Horizonte de eventos: disco negro plano
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2);
+  ctx.shadowColor = hex(c2, 0.9); ctx.shadowBlur = 18 + amplitud * 26;
+  ctx.fillStyle = '#000'; ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // 4) Anillo de fotones con aberración cromática (copias cian/magenta desplazadas = look CRT)
+  ctx.globalCompositeOperation = 'lighter';
+  const off = 1.6 + amplitud * 2.4;
+  const anillo = (dx, col, lw, al) => {
+    ctx.beginPath(); ctx.arc(cx + dx, cy, R * 1.02, 0, Math.PI * 2);
+    ctx.strokeStyle = hex(col, al); ctx.lineWidth = lw; ctx.stroke();
+  };
+  anillo(-off, c1, 2.2, 0.8);
+  anillo(off,  c2, 2.2, 0.8);
+  anillo(0, '#ffffff', 1.3, 0.55);
+  ctx.globalCompositeOperation = 'source-over';
+
+  // 5) Scanlines CRT: solo sobre lo ya dibujado (source-atop no toca el escritorio transparente)
+  ctx.globalCompositeOperation = 'source-atop';
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  for (let y = (Math.floor(t * 30) % 3); y < H; y += 3) ctx.fillRect(0, y, W, 1.3);
+  ctx.globalCompositeOperation = 'source-over';
+
+  amplitud *= 0.93;
+  if (estado === 'hablando' && Math.random() < 0.35) amplitud = Math.min(1, amplitud + 0.25 + Math.random() * 0.3);
+  velocidad += (({idle:0.004, escuchando:0.007, pensando:0.02, hablando:0.009})[estado] - velocidad) * 0.05;
+  requestAnimationFrame(dibujar);
+}
+dibujar();
+
+// ---------- interacción ----------
+// Arrastrar horizontalmente con el mouse gira el disco 0-360 (lo mismo que la pinza con la mano)
+let arrastrando = false, x0 = 0, inc0 = 0;
+cv.addEventListener('mousedown', e => { arrastrando = true; x0 = e.clientX; inc0 = inclinacion; giroObjetivo = null; });
+addEventListener('mouseup', () => arrastrando = false);
+addEventListener('mousemove', e => { if (arrastrando) inclinacion = inc0 + (e.clientX - x0) / 120; });
+// Clic en el orbe: abre el campo para escribir
+cv.addEventListener('click', e => {
+  if (Math.abs(e.clientX - x0) > 4) return;
+  entrada.style.display = entrada.style.display === 'block' ? 'none' : 'block';
+  if (entrada.style.display === 'block') entrada.focus();
+});
+entrada.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && entrada.value.trim()) {
+    enviar({ tipo: 'texto_escrito', valor: entrada.value.trim() });
+    entrada.value = ''; entrada.style.display = 'none';
+  }
+  if (e.key === 'Escape') entrada.style.display = 'none';
+});
+
+// ---------- WebSocket con el núcleo ----------
+let ws;
+function conectar(){
+  ws = new WebSocket('ws://127.0.0.1:8765');
+  ws.onopen = () => setEstado('idle');
+  ws.onclose = () => { setEstado('sin núcleo'); setTimeout(conectar, 2000); };
+  ws.onmessage = ev => {
+    const m = JSON.parse(ev.data);
+    switch (m.tipo) {
+      case 'estado':   setEstado(m.valor); break;
+      case 'texto':    panel.innerHTML = m.valor.replace(/</g, '&lt;'); panel.classList.add('visible'); break;
+      case 'imagen':   panel.innerHTML += `<img src="file:///${m.ruta.replace(/\\/g, '/')}">`; panel.classList.add('visible'); break;
+      case 'expandir': expandido = true; document.body.classList.add('expandido'); ipcRenderer.send('ui', 'expandir'); break;
+      case 'contraer': expandido = false; document.body.classList.remove('expandido'); panel.classList.remove('visible'); ipcRenderer.send('ui', 'contraer'); break;
+      case 'mostrar':  document.body.classList.remove('anclado'); ipcRenderer.send('ui', 'centrar'); break;
+      case 'ocultar':  document.body.classList.add('anclado'); panel.classList.remove('visible'); entrada.style.display = 'none'; ipcRenderer.send('ui', 'anclar'); break;
+      case 'giro':     giroObjetivo = m.grados; break;
+    }
+  };
+}
+function enviar(o){ if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
+function setEstado(s){
+  estado = COLORES[s] ? s : 'idle';
+  estadoEl.textContent = ({idle:'', escuchando:'te escucho', pensando:'pensando…', hablando:'', 'sin núcleo':'sin núcleo'})[s] ?? '';
+  if (s === 'idle') setTimeout(() => panel.classList.remove('visible'), 4000);
+}
+conectar();
+</script>
+</body>
+</html>

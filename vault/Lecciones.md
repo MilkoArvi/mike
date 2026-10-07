@@ -1,0 +1,1 @@
+- [2026-09-04] Asegurarse de que los argumentos de ejecutar hands() sean un diccionario y no una lista para evitar errores de tipo.

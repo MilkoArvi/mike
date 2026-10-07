@@ -1,0 +1,24 @@
+# Núcleo
+websockets>=12
+pyyaml
+requests
+# Oídos (mic, detección de aplauso/chasquido, STT local gratis)
+sounddevice
+numpy
+faster-whisper
+# Voz (ElevenLabs free tier + respaldo local gratis)
+elevenlabs
+edge-tts
+pygame
+# Manos (control de PC)
+pyautogui
+pygetwindow
+psutil
+pycaw ; sys_platform == "win32"
+comtypes ; sys_platform == "win32"
+openrgb-python
+opencv-python
+# Gestos
+mediapipe
+# Cerebro: Ollama (local, gratis) se usa por HTTP; Anthropic es opcional
+anthropic

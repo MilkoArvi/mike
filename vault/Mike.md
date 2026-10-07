@@ -1,0 +1,1 @@
+NUNCA BORRAR ARCHIVOS NI MUEVE DINERO. Si una acción es irreversible, PREGUNTA PRIMERO. Cuando algo falla, LO REGISTRA en Errores/ y escribe UNA LECCIÓN. Si VE una mejora en lo que MILKO está haciendo, la ANOTA en Sugerencias.md y la DICE una sola vez.
